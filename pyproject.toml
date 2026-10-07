@@ -14,6 +14,12 @@ dependencies = [
     "nltk"
 ]
 
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-asyncio"
+]
+
 [project.scripts]
 calibre-full-mcp = "src.server:main"
 calibre-full-mcp-setup = "src.prepare_nltk:main"

@@ -1,6 +1,8 @@
 import subprocess
 import json
 import os
+import sys
+import shutil
 import threading
 import time
 import tempfile
@@ -84,6 +86,45 @@ class WorkerPool:
                     # Store reference to stderr file
                     self.worker_stderr_files[resolved_name] = (log_file, log_file_path)
                     
+                    # Prepare environment for calibre-debug to ensure it runs with system python
+                    # and doesn't inherit virtualenv python which lacks Calibre's dependencies
+                    worker_env = os.environ.copy()
+                    if "VIRTUAL_ENV" in worker_env:
+                        del worker_env["VIRTUAL_ENV"]
+                    if "PYTHONHOME" in worker_env:
+                        del worker_env["PYTHONHOME"]
+                    if "PYTHONPATH" in worker_env:
+                        del worker_env["PYTHONPATH"]
+
+                    calibre_debug = shutil.which("calibre-debug")
+                    extra_paths = []
+                    if calibre_debug:
+                        extra_paths.append(os.path.dirname(os.path.abspath(calibre_debug)))
+                    if os.path.exists("/usr/bin"):
+                        extra_paths.append("/usr/bin")
+                    if os.path.exists("/usr/local/bin"):
+                        extra_paths.append("/usr/local/bin")
+
+                    # Remove known virtual environments from PATH
+                    current_paths = worker_env.get("PATH", "").split(os.pathsep)
+                    filtered = []
+                    for p in current_paths:
+                        p_abs = os.path.abspath(p)
+                        if os.path.exists(os.path.join(p, "..", "pyvenv.cfg")):
+                            continue
+                        if "/.venv/" in p_abs or "/venv/" in p_abs or p_abs.endswith("/.venv/bin") or p_abs.endswith("/venv/bin"):
+                            continue
+                        if p_abs.startswith(os.path.expanduser("~/.cache/uv")) or p_abs.startswith(os.path.expanduser("~/.local/share/uv")):
+                            continue
+                        filtered.append(p)
+
+                    final_paths = []
+                    for p in extra_paths + filtered:
+                        if p and p not in final_paths:
+                            final_paths.append(p)
+
+                    worker_env["PATH"] = os.pathsep.join(final_paths)
+
                     cmd = ["calibre-debug", worker_path, lib_path]
                     proc = subprocess.Popen(
                         cmd,
@@ -92,7 +133,8 @@ class WorkerPool:
                         stderr=log_file,
                         text=True,
                         bufsize=1,
-                        encoding='utf-8'
+                        encoding='utf-8',
+                        env=worker_env
                     )
                     self.workers[resolved_name] = proc
                     self.worker_stats[resolved_name] = {'last_used': time.time(), 'active_requests': 0}

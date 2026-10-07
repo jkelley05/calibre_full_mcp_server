@@ -1,4 +1,10 @@
-from mcp.server.fastmcp import FastMCP
+try:
+    from mcp.server.mcpserver import MCPServer as FastMCP
+    from mcp.server.mcpserver.exceptions import ToolError
+except (ImportError, ModuleNotFoundError):
+    from mcp.server.fastmcp import FastMCP
+    class ToolError(Exception):
+        pass
 import os
 import atexit
 import json
@@ -133,7 +139,12 @@ def create_tool_wrapper(impl_func, tool_name, description, needs_worker=True, ne
             if needs_config:
                 impl_kwargs['config_manager'] = config_manager
             impl_kwargs['library_name'] = default_library_name
-            return impl_func(**impl_kwargs)
+            try:
+                return impl_func(**impl_kwargs)
+            except Exception as e:
+                if isinstance(e, ToolError):
+                    raise
+                raise ToolError(str(e)) from e
     else:
         # Multi-library mode: include library_name parameter
         # Keep library_name in the signature
@@ -154,7 +165,12 @@ def create_tool_wrapper(impl_func, tool_name, description, needs_worker=True, ne
                 impl_kwargs['worker_pool'] = worker_pool
             if needs_config:
                 impl_kwargs['config_manager'] = config_manager
-            return impl_func(**impl_kwargs)
+            try:
+                return impl_func(**impl_kwargs)
+            except Exception as e:
+                if isinstance(e, ToolError):
+                    raise
+                raise ToolError(str(e)) from e
     
     # Set the signature on the wrapper
     wrapper.__signature__ = new_sig
@@ -389,7 +405,33 @@ if expose_via_tools:
 
 def main():
     """Main entry point for the MCP server."""
-    mcp.run()
+    import argparse
+    parser = argparse.ArgumentParser(description="Calibre Full MCP Server")
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "sse", "streamable-http"],
+        default="stdio",
+        help="Transport type (default: stdio)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=config_manager.get_global_setting("port", 8000),
+        help="Port to listen on for sse or streamable-http (default: from config or 8000)",
+    )
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host to bind for network transports (default: 127.0.0.1)",
+    )
+    args = parser.parse_args()
+
+    if args.transport == "stdio":
+        mcp.run(transport="stdio")
+    elif args.transport == "sse":
+        mcp.run(transport="sse", host=args.host, port=args.port)
+    elif args.transport == "streamable-http":
+        mcp.run(transport="streamable-http", host=args.host, port=args.port)
 
 if __name__ == "__main__":
     main()

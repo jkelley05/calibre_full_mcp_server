@@ -82,7 +82,7 @@ async def test_get_field_values_invalid_field(mcp_session):
     result = await mcp_session.call_tool("get_field_values", {
         "field_name": "non_existent_field"
     })
-    assert result.isError
+    assert getattr(result, "is_error", getattr(result, "isError", False))
     error_text = result.content[0].text.lower()
     assert "non_existent_field" in error_text or "does not exist" in error_text or "denied" in error_text
 

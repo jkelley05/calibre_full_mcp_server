@@ -46,7 +46,7 @@
                     "tests/test_files"
                 ],
                 "allow_overwrite_destination": false
-            }
+            },
             "worker_timeout": 300
         }
     },
