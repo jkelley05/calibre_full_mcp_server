@@ -87,6 +87,23 @@ def _get_best_source_format(available_formats):
         return available_upper[0]
     return None
 
+
+def _coerce_book_id(book_id, context=""):
+    """
+    Normalize a caller-provided book_id into the integer that Calibre's
+    database API (get_metadata, field_for, has_format, ...) requires.
+
+    Accepts both int and numeric-string book_ids, raising a clear ValueError
+    for non-numeric input so callers get a helpful message instead of a cryptic
+    "Book id X is not a valid integer" error.
+    """
+    if book_id is None:
+        raise ValueError("book_id is required")
+    try:
+        return int(book_id)
+    except (TypeError, ValueError):
+        raise ValueError(f"book_id must be an integer, got {book_id!r}") from None
+
 def _ensure_format(database, book_id, target_format, auto_convert):
     """
     Ensures that the book has the target format.
@@ -325,9 +342,16 @@ def main():
                     fields = params.get("fields")
                     if book_id is None:
                         raise ValueError("book_id is required")
-                    
+                    # Calibre's database API (field_for/get_metadata) requires a genuine int.
+                    # Accept both int and numeric string book_ids, normalizing to int up-front so
+                    # it is used consistently everywhere below.
+                    try:
+                        book_id = int(book_id)
+                    except (TypeError, ValueError):
+                        raise ValueError(f"book_id must be an integer, got {book_id!r}")
+
                     result = {
-                        'book_id': int(book_id)
+                        'book_id': book_id
                     }
                     # We're avoiding using get_metadata() because it returns stringified values for some fields
                     all_fields = database.field_metadata.all_field_keys()
@@ -424,6 +448,9 @@ def main():
                     if not book_id or not target_format:
                         raise ValueError("book_id and target_format are required")
                     
+                    # Normalize so both int and numeric-string book_ids work with Calibre's API
+                    book_id = _coerce_book_id(book_id)
+                    
                     path, error, was_converted, source_format = _ensure_format(
                         database, book_id, target_format, auto_convert=True
                     )
@@ -447,6 +474,9 @@ def main():
                     
                     if not book_id or not file_path:
                         raise ValueError("book_id and file_path are required")
+                    
+                    # Normalize so both int and numeric-string book_ids work with Calibre's API
+                    book_id = _coerce_book_id(book_id)
                     
                     # If no format specified, pick the best one available
                     if not target_format:
@@ -483,6 +513,9 @@ def main():
 
                     if book_id is None:
                         raise ValueError("book_id is required")
+                    
+                    # Normalize so both int and numeric-string book_ids work with Calibre's API
+                    book_id = _coerce_book_id(book_id)
                     
                     if formats_to_delete:
                         # logical delete of specific formats
@@ -633,6 +666,9 @@ def main():
                     if not book_id or not changes:
                         raise ValueError("book_id and changes are required")
                     
+                    # Normalize so both int and numeric-string book_ids work with Calibre's API
+                    book_id = _coerce_book_id(book_id)
+                    
                     mi = database.get_metadata(book_id)
                     for key, value in changes.items():
                         if key.startswith("#"):
@@ -652,6 +688,9 @@ def main():
 
                     if book_id is None:
                         raise ValueError("book_id is required")
+                    
+                    # Normalize so both int and numeric-string book_ids work with Calibre's API
+                    book_id = _coerce_book_id(book_id)
                     
                     path, error, was_converted, source_format = _ensure_format(database, book_id, "TXT", auto_convert)
                     
